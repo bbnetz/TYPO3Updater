@@ -23,12 +23,6 @@
  * Fork me on GitHub
  * https://github.com/bbnetz/TYPO3Updater
  *
- * ####################
- * # Missing Features #
- * ####################
- * Ownership
- * Symlink or Not
- * Blacklisting
  *
  */
 
@@ -70,6 +64,21 @@ class TYPO3Updater {
 	 * But will create and download TYPO3 Versions from get.typo3.org
 	 */
 	protected $dryRun = false;
+
+	/**
+	 * @param boolean $useGlobalOwner if set $globalOwner will be used as owner everywhere
+	 */
+	protected $useGlobalOwner = false;
+
+	/**
+	 * @param string $globalOwner will be used to the the owner of the TYPO3 instances
+	 */
+	protected $globalOwner = 'www-data:www-data';
+
+	/**
+	 * @param string $templateOwner will be used to set the Templates Owner
+	 */
+	protected $templateOwner = 'www-data:www-data';
 
 	/**
 	 * @param int $work the method to update all the instances
@@ -128,6 +137,14 @@ class TYPO3Updater {
 		// instancesDeep
 		// workMode
 		// dryRun
+		//if(!root)
+		$this->dryRun = true;
+		$this->work= TYPO3Updater::TEMPLATE_COPY;
+		if(posix_getuid() != 0) {
+			$this->dryRun = true;
+			echo 'Running the Script without ROOT access is not possible. The script will run in dry mode.'.PHP_EOL;
+		}
+
 	}
 
 	/**
@@ -162,6 +179,7 @@ class TYPO3Updater {
 		if(!$this->checkVersion($versions->latest_old_stable, 'latest_old_stable')) $this->downloadVersion($versions->latest_old_stable);
 		if(!$this->checkVersion($versions->latest_lts, 'latest_lts')) $this->downloadVersion($versions->latest_lts);
 		if(!$this->checkVersion($versions->latest_deprecated, 'latest_deprecated')) $this->downloadVersion($versions->latest_deprecated);
+		exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
 	}
 
 	/**
@@ -192,7 +210,6 @@ class TYPO3Updater {
 	 *
 	 * @param $version string the version number to download
 	 * @return void 
-	 * @todo setOwner of extracted files
 	 */
 	protected function downloadVersion($version) {
 		$versions = explode('.', $version);
@@ -248,10 +265,26 @@ class TYPO3Updater {
 				'path' => $found,
 				'version' => $state,
 				'outdated' => $versionCheck[0],
-				'requestedVersion' => $versionCheck[1]
+				'requestedVersion' => $versionCheck[1],
+				'owner' => $this->getOwner($found)
 				);
 		}
 		return $tmp;
+	}
+
+	/**
+	 * function getOwner
+	 * Tries to get the owner of the instances path or returns $globalOwner
+	 * 
+	 * @param $found string the owner of the updated instances
+	 * @return string the owner parameter
+	 */
+	protected function getOwner($found) {
+		if($this->useGlobalOwner)
+			return $this->globalOwner;
+		$fileOwner = posix_getpwuid(fileowner($found));
+		$groupOwner = posix_getgrgid(filegroup($found));
+		return $fileOwner['name'].':'.$groupOwner['name'];
 	}
 
 	/**
@@ -280,7 +313,7 @@ class TYPO3Updater {
 
 	/**
 	 * function isOutdated
-	 * Checks if TYPO3 instance is older than
+	 * Checks if TYPO3 instance is old
 	 * Echos if not a recommend version anymore
 	 *
 	 * @param $path string the path to the local TYPO3 instance
@@ -293,7 +326,7 @@ class TYPO3Updater {
 			$version = explode('.', $version);
 			if($version[0] == $state[0] && $version[1] == $state[1]) {
 				if($version[2] == $state[2])
-					return array(false, implode('.', $version));
+					return array(true, implode('.', $version));// need to be false! TODO only development context!
 				return array(true, implode('.', $version));
 			}
 		}
@@ -358,30 +391,41 @@ class TYPO3Updater {
 	/**
 	 * function updateFoundVersionSymlinkGlobal
 	 * 
-	 * @todo updateFoundVersionSymlinkGlobal
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return void
 	 */
 	protected function updateFoundVersionSymlinkGlobal($found) {
-		// @todo write this
+		$targetVersion = explode('.', $found['requestedVersion']);
+		$this->execCommand('rm -rf '.$found['path'].'index.php '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'typo3src');
+		
+		$this->execCommand('ln -s '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-* '.$found['path'].'typo3src' );
+		$this->execCommand('ln -s '.$found['path'].'typo3src/typo3 '.$found['path'].'typo3');
+		$this->execCommand('ln -s '.$found['path'].'typo3src/t3lib '.$found['path'].'t3lib');
+		$this->execCommand('ln -s '.$found['path'].'typo3src/index.php '.$found['path'].'index.php');
+
+		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'typo3src '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
+		echo '# '.$found['path'].' updated with GlobalSymlink to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
 	 * function updateFoundVersionCopy
 	 * 
-	 * @todo updateFoundVersionCopy
-	 * @todo setOwner
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return void
 	 */
 	protected function updateFoundVersionCopy($found) {
-		// @todo write this
+		$targetVersion = explode('.', $found['requestedVersion']);
+		$this->execCommand('rm -rf '.$found['path'].'index.php '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'typo3src');
+		$this->execCommand('cp -R '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-*/typo3 '.$found['path']);
+		$this->execCommand('cp -R '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-*/t3lib '.$found['path']);
+		$this->execCommand('cp -R '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-*/index.php '.$found['path']);
+		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
+		echo '# '.$found['path'].' updated with Copy to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
 	 * function updateFoundVersionSymlinkCopy
 	 *
-	 * @todo setOwner
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return void
 	 */
@@ -392,7 +436,8 @@ class TYPO3Updater {
 		$this->execCommand('ln -s '.$found['path'].'typo3src/typo3 '.$found['path'].'typo3');
 		$this->execCommand('ln -s '.$found['path'].'typo3src/t3lib '.$found['path'].'t3lib');
 		$this->execCommand('ln -s '.$found['path'].'typo3src/index.php '.$found['path'].'index.php');
-		echo $found['path'].' updated to '.$found['requestedVersion'];
+		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'typo3src '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
+		echo '# '.$found['path'].' updated with SymlinkCopy to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
