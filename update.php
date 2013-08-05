@@ -83,7 +83,12 @@ class TYPO3Updater {
 	/**
 	 * @param int $work the method to update all the instances
 	 */
-	protected $work = TYPO3Updater::TEMPLATE_SYMLINK_COPY;
+	protected $work = TYPO3Updater::TEMPLATE_USE_CURRENT;
+
+	/**
+	 * @param boolean $forceUpdate makes update even if unneeded
+	 */
+	protected $forceUpdate = false;
 
 	/**
 	 * @param array<versionName => versionNumber>
@@ -102,7 +107,7 @@ class TYPO3Updater {
 	const TEMPLATE_COPY = 0;
 
 	/**
-	 * @param int TEMPLATE_SYMLINK
+	 * @param int TEMPLATE_SYMLINK_GLOBAL
 	 * If set: will use global symlinking from $templatePath
 	 */
 	const TEMPLATE_SYMLINK_GLOBAL = 1;
@@ -115,7 +120,6 @@ class TYPO3Updater {
 
 	/**
 	 * @param int TEMPLATE_USE_CURRENT
-	 * @todo TEMPLATE_USE_CURRENT not yet finished
 	 * If set: will try to find out what is used right now and update 
 	 */
 	const TEMPLATE_USE_CURRENT = 3;
@@ -125,26 +129,87 @@ class TYPO3Updater {
 	 *
 	 * Collection all CLI Params
 	 * Setting local settings from CLI params
+	 * @throws Exception if Params are missing or setted false
 	 *
+	 * @return TYPO3Update
 	 */
-	public function __construct($argv) {
-		//@todo
-		// suppress
-		// templateOwner
+	public function __construct() {
+
 		// VersionOwner
-		// templatePath
-		// instancesPath
-		// instancesDeep
-		// workMode
-		// dryRun
-		//if(!root)
-		$this->dryRun = true;
-		$this->work= TYPO3Updater::TEMPLATE_COPY;
-		if(posix_getuid() != 0) {
-			$this->dryRun = true;
-			echo 'Running the Script without ROOT access is not possible. The script will run in dry mode.'.PHP_EOL;
+		$ops = getopt('', 
+			array( 
+				'',
+				'templatePath:',
+				'templateOwner:',
+				'path:',
+				'pathLevel:',
+				'workMode:',
+				'dryRun::',
+				'forceUpdate::',
+				'pathOwner::',
+				'suppressOutDated::'
+			)
+			);
+
+		if(!isset($ops['templatePath']))
+			throw new Exception('No templatePath set. Please read Readme.md');
+		$this->templatePath = $ops['templatePath'];
+
+		if(!isset($ops['templateOwner']))
+			throw new Exception('No templateOwner set. Please read Readme.md');
+		$this->templateOwner = $ops['templateOwner'];
+
+		if(!isset($ops['path']))
+			throw new Exception('No path set. Please read Readme.md');
+		$this->path = $ops['path'];
+
+		if(!isset($ops['pathLevel']))
+			throw new Exception('No pathLevel set. Please read Readme.md');
+		$this->depth = intval($ops['pathLevel']);
+
+		if(!isset($ops['workMode']))
+			throw new Exception('No workMode set. Please read Readme.md');
+
+		switch($ops['workMode']) {
+			case 'copy':
+				$this->work = TYPO3Updater::TEMPLATE_COPY;
+				break;
+
+			case 'current':
+				$this->work = TYPO3Updater::TEMPLATE_USE_CURRENT;
+				break;
+
+			case 'symlink':
+				$this->work = TYPO3Updater::TEMPLATE_SYMLINK_GLOBAL;
+				break;
+
+			case 'symlink_copy':
+				$this->work = TYPO3Updater::TEMPLATE_SYMLINK_COPY;
+				break; 
+
+			default:
+				throw new Exception('Wrong workMode set. Please read Readme.md');
+				break;
 		}
 
+		if(isset($ops['dryRun']))
+			$this->dryRun = true;
+
+		if(isset($ops['forceUpdate']))
+			$this->forceUpdate = true;
+
+		if(isset($ops['pathOwner'])) {
+			$this->useGlobalOwner = true;
+			$this->globalOwner = $ops['pathOwner'];
+		}
+
+		if(isset($ops['suppressOutDated']))
+			$this->suppressOutDated = true;
+
+		if(posix_getuid() != 0) {
+			$this->dryRun = true;
+			echo "\033[0;31m# Running the Script without ROOT access is not possible. The script will run in dry mode.".PHP_EOL;
+		}
 	}
 
 	/**
@@ -179,7 +244,8 @@ class TYPO3Updater {
 		if(!$this->checkVersion($versions->latest_old_stable, 'latest_old_stable')) $this->downloadVersion($versions->latest_old_stable);
 		if(!$this->checkVersion($versions->latest_lts, 'latest_lts')) $this->downloadVersion($versions->latest_lts);
 		if(!$this->checkVersion($versions->latest_deprecated, 'latest_deprecated')) $this->downloadVersion($versions->latest_deprecated);
-		exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
+		if(!$this->dryRun)
+			exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
 	}
 
 	/**
@@ -215,7 +281,7 @@ class TYPO3Updater {
 		$versions = explode('.', $version);
 		$tarFile = $this->templatePath.$versions[0].'/'.$versions[0].'_'.$versions[1].'_'.$versions[2].'.tar.gz';
 		$path = $this->templatePath.$versions[0].'/'.$versions[1].'-'.$versions[2];
-		echo "Need to download new TYPO3 Version: ".$version.PHP_EOL;
+		echo "\033[0;31mNeed to download new TYPO3 Version: ".$version.PHP_EOL;
 		$ch = curl_init('http://get.typo3.org/'.$versions[0].'.'.$versions[1].'.'.$versions[2]);
 		$fp = fopen($tarFile, 'w');
 
@@ -325,13 +391,13 @@ class TYPO3Updater {
 		foreach($this->maximumVersionNumbers as $version) {
 			$version = explode('.', $version);
 			if($version[0] == $state[0] && $version[1] == $state[1]) {
-				if($version[2] == $state[2])
-					return array(true, implode('.', $version));// need to be false! TODO only development context!
+				if($version[2] == $state[2] && !$this->forceUpdate)
+					return array(false, implode('.', $version));
 				return array(true, implode('.', $version));
 			}
 		}
 		if(!$this->suppressOutDated)
-			echo 'Version '.implode('.', $state).' of instance: '.$path. ' Is outdated! Please Update!'.PHP_EOL;
+			echo "\033[0;31mVersion ".implode('.', $state).' of instance: '.$path. ' Is outdated! Please Update!'.PHP_EOL;
 		return false; //so that this script is not trying to update
 	}
 
@@ -359,7 +425,7 @@ class TYPO3Updater {
 	protected function updateFoundVersion($found) {
 		$task = $this->work;
 		if($task == TYPO3Updater::TEMPLATE_USE_CURRENT)
-			$task = findCurrentSolution($found);
+			$task = $this->findCurrentSolution($found);
 		switch($task) {
 			case TYPO3Updater::TEMPLATE_COPY:
 				$this->updateFoundVersionCopy($found);
@@ -378,14 +444,16 @@ class TYPO3Updater {
 	/**
 	 * function findCurrentSolution
 	 * Trys to figgure out what solution currently is used before updating
-	 * @throws Exception if solution not found
-	 * @todo write findCurrentSolution
 	 * 
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return int the taskType
 	 */
 	protected function findCurrentSolution($found) {
-		// @todo write this
+		if(!is_link($found['path'].'index.php'))
+			return TYPO3Updater::TEMPLATE_COPY;
+		if(!is_link($found['path'].'typo3src'))
+			return TYPO3Updater::TEMPLATE_SYMLINK_COPY;
+		return TYPO3Updater::TEMPLATE_SYMLINK_GLOBAL;
 	}
 
 	/**
@@ -397,14 +465,12 @@ class TYPO3Updater {
 	protected function updateFoundVersionSymlinkGlobal($found) {
 		$targetVersion = explode('.', $found['requestedVersion']);
 		$this->execCommand('rm -rf '.$found['path'].'index.php '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'typo3src');
-		
 		$this->execCommand('ln -s '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-* '.$found['path'].'typo3src' );
 		$this->execCommand('ln -s '.$found['path'].'typo3src/typo3 '.$found['path'].'typo3');
 		$this->execCommand('ln -s '.$found['path'].'typo3src/t3lib '.$found['path'].'t3lib');
 		$this->execCommand('ln -s '.$found['path'].'typo3src/index.php '.$found['path'].'index.php');
-
 		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'typo3src '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
-		echo '# '.$found['path'].' updated with GlobalSymlink to '.$found['requestedVersion'].PHP_EOL;
+		echo "\033[0;31m# ".$found['path'].' updated with GlobalSymlink to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
@@ -420,7 +486,7 @@ class TYPO3Updater {
 		$this->execCommand('cp -R '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-*/t3lib '.$found['path']);
 		$this->execCommand('cp -R '.$this->templatePath.$targetVersion[0].'/'.$targetVersion[1].'-'.$targetVersion[2].'/typo3_src-*/index.php '.$found['path']);
 		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
-		echo '# '.$found['path'].' updated with Copy to '.$found['requestedVersion'].PHP_EOL;
+		echo "\033[0;31m# ".$found['path'].' updated with Copy to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
@@ -437,7 +503,7 @@ class TYPO3Updater {
 		$this->execCommand('ln -s '.$found['path'].'typo3src/t3lib '.$found['path'].'t3lib');
 		$this->execCommand('ln -s '.$found['path'].'typo3src/index.php '.$found['path'].'index.php');
 		$this->execCommand('chown -R '.$found['owner'].' '.$found['path'].'typo3src '.$found['path'].'t3lib '.$found['path'].'typo3 '.$found['path'].'index.php');
-		echo '# '.$found['path'].' updated with SymlinkCopy to '.$found['requestedVersion'].PHP_EOL;
+		echo "\033[0;31m# ".$found['path'].' updated with SymlinkCopy to '.$found['requestedVersion'].PHP_EOL;
 	}
 
 	/**
@@ -450,7 +516,7 @@ class TYPO3Updater {
 	 */
 	protected function execCommand($cmd) {
 		if($this->dryRun) {
-			echo $cmd.PHP_EOL;
+			echo "\033[0m".$cmd.PHP_EOL;
 		}else{
 			exec($cmd);
 		}
@@ -458,7 +524,7 @@ class TYPO3Updater {
 
 }
 
-$run = new TYPO3Updater($argv);
+$run = new TYPO3Updater();
 $run->run();
 
 ?>
