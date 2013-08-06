@@ -185,7 +185,7 @@ class TYPO3Updater {
 
 			case 'symlink_copy':
 				$this->work = TYPO3Updater::TEMPLATE_SYMLINK_COPY;
-				break; 
+				break;
 
 			default:
 				throw new Exception('Wrong workMode set. Please read Readme.md');
@@ -223,8 +223,7 @@ class TYPO3Updater {
 	 * @return void
 	 */
 	public function run() {
-		if(!$this->dryRun)
-			$this->checkLocalTYPO3Copies();
+		$this->checkLocalTYPO3Copies();
 		$founds = $this->getTYPO3Instances();
 		$founds = $this->checkFoundVersions($founds);
 		$founds = $this->updateFoundVersions($founds);
@@ -260,12 +259,14 @@ class TYPO3Updater {
 	 */
 	protected function checkVersion($version, $versionTitle) {
 		$this->maximumVersionNumbers[$versionTitle] = $version;
-		$versions = explode('.', $version);
-		if(!file_exists($this->templatePath.$versions[0]))
-			mkdir($this->templatePath.$versions[0]);
-		if(!file_exists($this->templatePath.$versions[0].'/'.$versions[1].'-'.$versions[2])) {
-			mkdir($this->templatePath.$versions[0].'/'.$versions[1].'-'.$versions[2]);
-			return false;
+		if(!$this->dryRun) {
+			$versions = explode('.', $version);
+			if(!file_exists($this->templatePath.$versions[0]))
+				mkdir($this->templatePath.$versions[0]);
+			if(!file_exists($this->templatePath.$versions[0].'/'.$versions[1].'-'.$versions[2])) {
+				mkdir($this->templatePath.$versions[0].'/'.$versions[1].'-'.$versions[2]);
+				return false;
+			}
 		}
 		return true;
 	}
