@@ -111,7 +111,7 @@ class TYPO3Updater {
 	 * If set: will use global symlinking from $templatePath
 	 */
 	const TEMPLATE_SYMLINK_GLOBAL = 1;
-	
+
 	/**
 	 * @param int TEMPLATE_SYMLINK_COPY
 	 * If set: will copy from $templatePath and use a symlink to a local copy
@@ -120,7 +120,7 @@ class TYPO3Updater {
 
 	/**
 	 * @param int TEMPLATE_USE_CURRENT
-	 * If set: will try to find out what is used right now and update 
+	 * If set: will try to find out what is used right now and update
 	 */
 	const TEMPLATE_USE_CURRENT = 3;
 
@@ -136,8 +136,8 @@ class TYPO3Updater {
 	public function __construct() {
 
 		// VersionOwner
-		$ops = getopt('', 
-			array( 
+		$ops = getopt('',
+			array(
 				'',
 				'templatePath:',
 				'templateOwner:',
@@ -223,7 +223,8 @@ class TYPO3Updater {
 	 * @return void
 	 */
 	public function run() {
-		$this->checkLocalTYPO3Copies();
+		if(!$this->dryRun)
+			$this->checkLocalTYPO3Copies();
 		$founds = $this->getTYPO3Instances();
 		$founds = $this->checkFoundVersions($founds);
 		$founds = $this->updateFoundVersions($founds);
@@ -244,8 +245,7 @@ class TYPO3Updater {
 		if(!$this->checkVersion($versions->latest_old_stable, 'latest_old_stable')) $this->downloadVersion($versions->latest_old_stable);
 		if(!$this->checkVersion($versions->latest_lts, 'latest_lts')) $this->downloadVersion($versions->latest_lts);
 		if(!$this->checkVersion($versions->latest_deprecated, 'latest_deprecated')) $this->downloadVersion($versions->latest_deprecated);
-		if(!$this->dryRun)
-			exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
+		exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
 	}
 
 	/**
@@ -253,7 +253,7 @@ class TYPO3Updater {
 	 * Checks if needed folders are created;
 	 * Creates Folders if not found
 	 * Checks if version already is installed
-	 * 
+	 *
 	 * @param $version string the version number
 	 * @param $versionTitle string the name of the version eg 'latest_lts'
 	 * @return boolean true if version already exists
@@ -275,7 +275,7 @@ class TYPO3Updater {
 	 * downloads TYPO3 Version to local template path
 	 *
 	 * @param $version string the version number to download
-	 * @return void 
+	 * @return void
 	 */
 	protected function downloadVersion($version) {
 		$versions = explode('.', $version);
@@ -341,7 +341,7 @@ class TYPO3Updater {
 	/**
 	 * function getOwner
 	 * Tries to get the owner of the instances path or returns $globalOwner
-	 * 
+	 *
 	 * @param $found string the owner of the updated instances
 	 * @return string the owner parameter
 	 */
@@ -444,7 +444,7 @@ class TYPO3Updater {
 	/**
 	 * function findCurrentSolution
 	 * Trys to figgure out what solution currently is used before updating
-	 * 
+	 *
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return int the taskType
 	 */
@@ -458,7 +458,7 @@ class TYPO3Updater {
 
 	/**
 	 * function updateFoundVersionSymlinkGlobal
-	 * 
+	 *
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return void
 	 */
@@ -475,7 +475,7 @@ class TYPO3Updater {
 
 	/**
 	 * function updateFoundVersionCopy
-	 * 
+	 *
 	 * @param $found array a Found Version including Path, Version and Outdated and RequestedVersion
 	 * @return void
 	 */
