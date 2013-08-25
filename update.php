@@ -153,7 +153,7 @@ class TYPO3Updater {
 
 		if(!isset($ops['templatePath']))
 			throw new Exception('No templatePath set. Please read Readme.md');
-		$this->templatePath = $ops['templatePath'];
+		$this->templatePath = realpath($ops['templatePath']);
 
 		if(!isset($ops['templateOwner']))
 			throw new Exception('No templateOwner set. Please read Readme.md');
@@ -161,7 +161,7 @@ class TYPO3Updater {
 
 		if(!isset($ops['path']))
 			throw new Exception('No path set. Please read Readme.md');
-		$this->path = $ops['path'];
+		$this->path = realpath($ops['path']);
 
 		if(!isset($ops['pathLevel']))
 			throw new Exception('No pathLevel set. Please read Readme.md');
