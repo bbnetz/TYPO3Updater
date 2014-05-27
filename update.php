@@ -97,7 +97,8 @@ class TYPO3Updater {
 		'latest_stable' => '0.0.0',
 		'latest_old_stable' => '0.0.0',
 		'latest_lts' => '0.0.0',
-		'latest_deprecated' => '0.0.0'
+		'latest_deprecated' => '0.0.0',
+		'latest_old_lts' => '0.0.0'
 		);
 
 	/**
@@ -244,6 +245,7 @@ class TYPO3Updater {
 		if(!$this->checkVersion($versions->latest_old_stable, 'latest_old_stable')) $this->downloadVersion($versions->latest_old_stable);
 		if(!$this->checkVersion($versions->latest_lts, 'latest_lts')) $this->downloadVersion($versions->latest_lts);
 		if(!$this->checkVersion($versions->latest_deprecated, 'latest_deprecated')) $this->downloadVersion($versions->latest_deprecated);
+		if(!$this->checkVersion($versions->latest_old_lts, 'latest_old_lts')) $this->downloadVersion($versions->latest_old_lts);
 		exec('chown -R '.$this->templateOwner.' '.$this->templatePath);
 	}
 
